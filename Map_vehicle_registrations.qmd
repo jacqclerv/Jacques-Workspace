@@ -1,0 +1,165 @@
+---
+title: "Using Quarto to Create a Variety of Documents"
+subtitle: "Automobile Registrations by State, 2020"
+author: "Jacques Clerville"
+date: "June 12, 2025"
+format: html
+editor: visual
+---
+
+## Load Packages
+
+-   You have to install your packages before you load them. To install them, you can use the following code: install.packages ("**name_of_your_package**"). A package is installed once but needs to always be loaded before each use.
+
+```{r}
+#| label: load-packages
+#| warning: false # Turn off warning messages
+#| message: false # Turn of messages
+
+library(tidyverse) # Contains dplyr for data manipulation, ggplot2 for data visualization, readr for csv files, and more
+library(scales) # For nice labels in charts
+library(ggrepel)    # For non-overlapping labels
+library(ggtext)     # For fancier text handling
+library(sf)         # Simple features package for importing and manipulating spatial data
+library(tigris)     # To shift non-contiguous states (Alaska, Hawaii) and Puerto Rico and other functionalities
+library(ggThemeAssist) # To add title, subtitle, caption to plots, and more
+```
+
+# Import Your Datasets
+
+```{r}
+#| label: import-datasets
+#| warning: false # turn off warning messages
+#| message: false
+
+us_states <- read_sf("data/cb_2023_us_state_20m/cb_2023_us_state_20m.shp") # data from the US Census Bureau
+Motor_vehicle <- read_csv("data/Motor_Vehicle_Registrations_Dashboard_data.csv") # We can also use read.csv function, which is included in Base R; data accessed from data.gov
+```
+
+## Create Basic US Map from US Census Bureau Data
+
+```{r}
+#| label: create-basic-US-plot
+#| warning: false # turn off warning messages
+#| message: false
+
+ggplot() +
+  geom_sf(data = us_states) +
+  coord_sf(crs = st_crs("ESRI:102003")) +  # Albers (specific projection for the contiguous US and often used for US maps; can distort shapes for non-contiguous states)
+  theme_void()
+```
+
+## Shift Alaska, Hawaii, and Puerto Rico with Shift_Geometry Function
+
+```{r}
+#| label: shift-us-map
+#| warning: false
+#| message: false
+
+
+us_states_shifted <- us_states %>%
+  shift_geometry() # function to shift non-contiguous states and PR; is included in tigris package
+
+ggplot() +
+  geom_sf(data = us_states_shifted) +
+  coord_sf(crs = st_crs("ESRI:102003")) +  # Albers projection works best when non-contiguous states are shifted
+  theme_void()
+```
+
+## Filter and Clean Your Datasets
+
+-   R is **case sensitive**. Make sure you enter the value names as they appear in the dataset when you are re-coding them and use quotations for categorical values.
+
+```{r}
+#| label: filter-clean-datasets
+#| warning: false
+#| message: false
+
+us_states_new <- us_states_shifted %>%
+  filter (NAME != 'Puerto Rico') 
+
+Motor_vehicle_2020 <- (Motor_vehicle) %>%
+    filter(year == 2020) %>% 
+    select (state, Auto, Bus, Truck, Motorcycle) %>% 
+    mutate(state = case_when(
+    state == "Connecticut (2)" ~ "Connecticut",
+    state == "Dist. of Col." ~ "District of Columbia",
+    state == "Illinois (2)" ~ "Illinois",
+    state == "Kansas (2)" ~ "Kansas",
+    state == "Maine (2)" ~ "Maine",
+    state == "Massachusetts (2)" ~ "Massachusets",
+    state == "Michigan (2)" ~ "Michigan",
+    state == "Minnesota (2)" ~ "Minnesota",
+    state == "Missouri (2)" ~ "Missouri",
+    state == "Nevada (2)" ~ "Nevada",
+    state == "New Jersey (2)" ~ "New Jersey",
+    state == "Oklahoma (2)" ~ "Oklahoma",
+    state == "Vermont (2)" ~ "Vermont",
+    state == "Washington (2)" ~ "Washington",
+    state == "West Virginia (2)" ~ "West Virginia",
+    state == "Wisconsin (2)" ~ "Wisconsin",
+    TRUE ~ state))  # Keep other values unchanged
+```
+
+# Merge Coordinates Dataset with Motor Vehicle Dataset (Left Join)
+
+```{r}
+#| label: merge-datasets
+#| warning: false
+#| message: false
+
+
+combined_dataset <- us_states_new %>% 
+  left_join(Motor_vehicle_2020, by = c("NAME" = "state"))
+```
+
+## Create US Map Showing Scale of Automobile Registrations by State
+
+```{r}
+#| label: create-map
+#| warning: false
+#| message: false
+
+ggplot() + 
+  geom_sf(data = combined_dataset, 
+          aes(fill = Auto),
+          linewidth = 0.25) +
+  coord_sf(crs = st_crs("ESRI:102003")) +  # Albers
+    scale_fill_viridis_c(option = "inferno", labels = label_comma()) +
+labs(fill = "Auto")  # inferno is colorblind-friendly
+```
+
+# Save Plot
+
+```{r}
+#| label: save-map
+#| warning: false
+#| message: false
+
+
+save_map <- ggplot() + 
+  geom_sf(data = combined_dataset, 
+          aes(fill = Auto),
+          linewidth = 0.25) +
+  coord_sf(crs = st_crs("ESRI:102003")) +  # Albers
+    scale_fill_viridis_c(option = "inferno", labels = label_comma()) +
+  labs(fill = "Auto")
+```
+
+# Final Plot
+
+```{r}
+#| label: add-title-subtitle-caption
+#| warning: false
+#| message: false
+
+
+save_map + theme(plot.title = element_text(size = 16)) +labs(title = "Automobile Registrations by State, United States, 2020") + theme(plot.subtitle = element_text(size = 12)) +labs(subtitle = "California, Texas, and Florida had the highest number of registered automobiles") + theme(plot.caption = element_text(size = 10)) +labs(caption = "Source: US Census Bureau and US Government's Open Data")
+```
+
+## Resources
+
+-   [Quarto Website](https://quarto.org)
+-   [Making cleaner, nicer Quarto documents](https://datavizs24.classes.andrewheiss.com/news/2024-06-11_cleaner-nicer-qmd-output.html)
+-   [US Census Bureau Data](https://www.census.gov/data.html)
+-   [The Home of the U.S. Government's Open Data](https://data.gov/)
